@@ -50,3 +50,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+#Eclipse .settings Directory (the .project and .cproject files should be kept to be able to use "export of existing project into workspace")
+.settings/
