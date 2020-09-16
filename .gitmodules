@@ -1,0 +1,4 @@
+[submodule "MagPi_TPSO/tomlc99"]
+	path = MagPi_TPSO/tomlc99
+	url = git@github.com:midiwidi/tomlc99.git
+	branch = TPSO_Mag
