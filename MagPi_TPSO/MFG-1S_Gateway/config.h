@@ -8,8 +8,8 @@
 
 #define DEFAULT_LOGLEVEL LOG_WARNING
 
-#define DEFAULT_AVG_N_BFIELD 			100		//every second (@ 100Hz Magnetometer output rate)
-#define DEFAULT_AVG_N_HK 				10		//every 10s
+#define DEFAULT_AVG_N_BFIELD 			6000		//every minute (@ 100Hz Magnetometer output rate)
+#define DEFAULT_AVG_N_HK 				240			//every 4min
 #define DEFAULT_TELEMETRY_RESOLUTION 	0.007748603821
 #define DEFAULT_TIMESTAMP_POSITION		TIMESTAMP_AT_LAST_SAMPLE
 
@@ -61,6 +61,8 @@ struct config
 	double telemetry_resolution;
 	enum timestamp_pos timestamp_position;
 	uint8_t downsample_mode;
+	int version_major;
+	int version_minor;
 };
 
 #endif /* CONFIG_H_ */

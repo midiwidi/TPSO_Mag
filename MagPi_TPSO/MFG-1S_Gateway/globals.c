@@ -30,6 +30,8 @@ struct config g_config = {	.avg_N_bfield = DEFAULT_AVG_N_BFIELD,
 							.orth = {0, 0, 0},
 							.telemetry_resolution = DEFAULT_TELEMETRY_RESOLUTION,
                             .timestamp_position = TIMESTAMP_AT_CENTER,
-                            .downsample_mode = AVERAGING};
+                            .downsample_mode = AVERAGING,
+							.version_major = 0,
+							.version_minor = 0};
 struct bfield_data g_bfield_data;
 struct hk_data g_hk_data;

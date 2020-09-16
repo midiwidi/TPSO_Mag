@@ -45,10 +45,13 @@ int main(int argc, char **argv)
 	uint8_t dbg_data_src = DBG_DATA_OFF;
 	FILE *fid;
 
+	char* conf_file = NULL;
+
 	static struct option long_options[] =
 	{
 		{ "avg_samp_bfield",	required_argument,	0, 'a' },
 		{ "avg_samp_hk",		required_argument,	0, 'A' },
+		{ "config",				required_argument, 	0, 'c' },
 		{ "dbg_data_src",		required_argument,	0, 'D' },
 		{ "help", 				no_argument,		0, 'h' },
 		{ "loglevel", 			required_argument,	0, 'l' },
@@ -56,10 +59,49 @@ int main(int argc, char **argv)
 		{ "version", 			no_argument,		0, 'v' },
 		{ 0, 0, 0, 0 }
 	};
-	char *optstring="a:A:D:hl:s:v";
+	char *optstring="a:A:c:D:hl:s:v";
 
 	log_start(g_config.loglevel);
 	signal_init();
+
+	while (1)
+	{
+		opt = getopt_long(argc, argv, optstring, long_options, &option_index);
+
+		/* Detect the end of the options. */
+		if (opt == -1)
+			break;
+		switch (opt)
+		{
+			case '?':
+				/* unknown option. getopt_long already printed an error message. */
+				print_cmd_usage();
+				ret = ERROR;
+				clean_exit(ret);
+				break;
+			case 'c':
+				conf_file = malloc(strlen(optarg)+1);
+				if(!conf_file)
+				{
+					log_write(LOG_ERR, "malloc failed getting memory for the config file name");
+					ret = ERROR;
+					clean_exit(ret);
+				}
+				strcpy(conf_file, optarg);
+				break;
+			default:
+				break;
+		}
+	}
+
+	ret = read_config(conf_file, &g_config);
+	if (ret)
+		log_write(LOG_WARNING, "reading config file: failed - using default config");
+	else
+		log_write(LOG_NOTICE, "reading config file: OK");
+
+	// setting the global variable optind to 1 resets getopt_long() so that we can parse the options again
+	optind = 1;
 
 	while (1)
 	{

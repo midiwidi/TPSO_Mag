@@ -94,10 +94,10 @@ void print_packet(uint8_t* packet, uint8_t packet_len)
 void print_cmd_usage(void)
 {
 	fprintf(stdout,
-			"usage: mfg1s_mqtt_client [OPTIONS]\n"
+			"usage: MFG-1S_Gateway [OPTIONS]\n"
 			"\n"
-			"Receives data from a digital fluxgate magnetometer (model MFG1S) manufactured by \"Magson GmbH\",\n"
-			"decodes and converts the data and publishes the data on an MQTT server (broker).\n"
+			"Receives data from a digital fluxgate magnetometer (model MFG-1S) manufactured by \"Magson GmbH\",\n"
+			"decodes and converts the data and outputs the data into a files (one for B field data, one for HK).\n"
 			"Note, all integer options can be provided in decimal, hexadecimal (prefix: 0x) or octal (prefix: 0) form.\n"
 			"\n"
 			"OPTIONS:\n"

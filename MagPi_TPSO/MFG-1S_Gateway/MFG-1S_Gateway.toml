@@ -1,0 +1,119 @@
+################################################################################
+# TPSO MFG-1S Magnetometer Gateway Configuration File                          #
+################################################################################
+
+# version major and minor valid range is 0...255
+version_major = 1
+version_minor = 0
+
+################################################################################
+# Version History                                                              #
+################################################################################
+# v1.0 - 2020/09/16: Built-in default configuration                            #
+################################################################################
+
+[Gateway]
+
+# Sampling rate divider for magnetic field data
+# Data type: integer
+# Valid values / range: 0 ... 8640000 (off ... once per day)
+# Comment: The default magnetic field data rate of the magnetometer is 100 Hz
+#          (if not commanded differently). A divider of 6000 for example
+#          reduces this down to 1 sample per minute. That's the rate of the
+#          data which is pushed into the database on the data server.
+Bfield_Divider = 6000
+
+# Sampling rate divider for housekeeping (HK) data
+# Data type: integer
+# Valid values / range: 0 ... 86400 (off ... once per day)
+# Comment: The housekeeping rate of the magnetometer is 1 Hz. A divider of
+#          240 for example reduces this down to 1 sample every 4 minutes. 
+#          That's the rate of the data which is pushed into the database 
+#          on the data server.
+HK_Divider = 240
+
+# Specifies if the data rate is reduced using averaging (box car) or decimation.
+# Data type: integer
+# Valid values / range: 0 = Averaging, 1 = Decimation
+Downsampling_Mode = 0
+
+# Specifies the position of the timestamp given with the magnetometer data in
+# relation to the time duration during which the output data sample was generated
+# (via averaging or decimation). 
+# Data type: integer
+# Valid values / range: 0: Timestamp from 1st sample of the averaging timeframe
+#                       1: Timestamp from the middle of the averaging timeframe
+#                       2: Timestamp from last sample of the averaging timeframe
+Timestamp_Position = 1
+
+# Specifies the log level at/above which messages from MFG-1S_Gateway are written 
+# into syslog
+# Data type: integer
+# Valid values / range: 0: emergancy    4: warning
+#                       1: alert        5: notice
+#                       2: critical     6: info
+#                       3: error        7: debug
+Loglevel = 5
+
+# Magnetic field resolution of the of the magnetometer telemetry in Nanotesla.
+# Data type: double
+# Valid values / range: whole range of double
+Telemetry_Res = 0.007748603821
+
+# Serial port which the magnetometer is connectd too
+# Data type: String
+Serial_Port = "/dev/ttyUSB0"
+
+# Name (and path) of the magnetic field output data file
+# Data type: String
+Mag_File = "mag.dat"
+
+# Name (and path) of the housekeeping output data file
+# Data type: String
+HK_File = "hk.dat"
+
+
+[Calibration]
+
+# Magnetic field data calibration parameters
+# Data type: double
+# Valid values / range: whole range of double
+Cal_Scale_BX = 1.0
+Cal_Scale_BY = 1.0
+Cal_Scale_BZ = 1.0
+
+Cal_Offset_BX = 0.0
+Cal_Offset_BY = 0.0
+Cal_Offset_BZ = 0.0
+
+Cal_Orth_XY = 0.0
+Cal_Orth_XZ = 0.0
+Cal_Orth_YZ = 0.0
+
+# Housekeeping data calibration parameters
+# Data type: double
+# Valid values / range: whole range of double
+# Comments: TE = Electronics Temperature,
+#           TS = Sensor Temperature
+#           Tilt = Tilt Sensor / Inclinometer
+#           V5p = +5V rail voltage
+#           V5n = -5V rail voltage
+#           3V3 = +3.3V rail voltage
+#           1V5 = +1.5V rail voltage
+Cal_Scale_TE = 0.01001445
+Cal_Scale_TS = -0.0085630207
+Cal_Scale_TiltX = -0.000059502559
+Cal_Scale_TiltY = -0.000059575229
+Cal_Scale_V5p = 0.0002
+Cal_Scale_V5n = 0.0004
+Cal_Scale_3V3 = 0.000133
+Cal_Scale_1V5 = 0.0001
+
+Cal_Offset_TE = -273.12595008
+Cal_Offset_TS = 159.61696874
+Cal_Offset_TiltX = 1.26686898
+Cal_Offset_TiltY = 1.26022460
+Cal_Offset_V5p = 0.0
+Cal_Offset_V5n = -3.0
+Cal_Offset_3V3 = 0.0
+Cal_Offset_1V5 = 0.0

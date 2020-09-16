@@ -7,12 +7,17 @@
 
 CC = arm-linux-gnueabihf-gcc
 
-CFLAGS		= -Wall -g -O0
-INCLUDES	= #-I/home/newhall/include  -I../include
-LFLAGS		= #-L/home/newhall/lib  -L../lib
-LIBS		= #-lmylib -lm
+CFLAGS		= -Wall
+ifdef DEBUG
+    CFLAGS += -O0 -g
+else
+	CFLAGS += -O3
+endif
+INCLUDES	= -I../
+LFLAGS		= -L../tomlc99
+LIBS		= -ltoml
 
-SRCS = MFG-1S_Gateway.c data_processing.c globals.c helpers.c log.c packet.c serial.c signal.c cmd.c fifos.c
+SRCS = MFG-1S_Gateway.c data_processing.c globals.c helpers.c log.c packet.c serial.c signal.c cmd.c fifos.c toml.c
 
 OBJS = $(SRCS:.c=.o)
 
