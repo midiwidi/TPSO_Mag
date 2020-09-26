@@ -1,3 +1,4 @@
+#include <time.h>
 #include "helpers.h"
 #include "globals.h"
 #include "data_processing.h"
@@ -16,6 +17,7 @@ int process_HK_packet(struct hk_packet* packet)
 									   .V5p=0, .V5n=0, .V33=0, .V15=0,
 									   .count=0};
 	double temp_e, temp_s, tilt_x, tilt_y, V5p, V5n, V33, V15;
+	struct timespec t_arrival;
 
 	temp_e = g_config.scale.temp_e * packet->temp_e + g_config.offset.temp_e;
 	temp_s = g_config.scale.temp_s * packet->temp_s + g_config.offset.temp_s;
@@ -25,6 +27,15 @@ int process_HK_packet(struct hk_packet* packet)
 	V5n = g_config.scale.V5n * packet->V5n + V5p * g_config.offset.V5n;
 	V33 = g_config.scale.V33 * packet->V33 + g_config.offset.V33;
 	V15 = g_config.scale.V15 * packet->V15 + g_config.offset.V15;
+
+	find_minmax(SEARCH, temp_e, &g_hk_data.temp_e_min, &g_hk_data.temp_e_max);
+	find_minmax(SEARCH, temp_s, &g_hk_data.temp_s_min, &g_hk_data.temp_s_max);
+	find_minmax(SEARCH, tilt_x, &g_hk_data.tilt_x_min, &g_hk_data.tilt_x_max);
+	find_minmax(SEARCH, tilt_y, &g_hk_data.tilt_y_min, &g_hk_data.tilt_y_max);
+	find_minmax(SEARCH, V5p, &g_hk_data.V5p_min, &g_hk_data.V5p_max);
+	find_minmax(SEARCH, V5n, &g_hk_data.V5n_min, &g_hk_data.V5n_max);
+	find_minmax(SEARCH, V33, &g_hk_data.V33_min, &g_hk_data.V33_max);
+	find_minmax(SEARCH, V15, &g_hk_data.V15_min, &g_hk_data.V15_max);
 
 	if (g_config.avg_N_hk != 0)
 	{
@@ -75,6 +86,14 @@ int process_HK_packet(struct hk_packet* packet)
 					g_hk_data.t = hk_accu.t_last;
 					break;
 			}
+
+			if (clock_gettime(CLOCK_REALTIME, &t_arrival))
+			{
+				t_arrival.tv_sec = 0;
+				t_arrival.tv_nsec = 0;
+			}
+			g_hk_data.t_drift = hk_accu.t_last - (t_arrival.tv_sec+t_arrival.tv_nsec/1E9);
+
 			g_hk_data.firmware_version = packet->firmware_version;
 			g_hk_data.temp_e = hk_accu.temp_e / hk_accu.count;
 			g_hk_data.temp_s = hk_accu.temp_s / hk_accu.count;
@@ -112,11 +131,17 @@ int process_bfield_packet(struct bfield_packet* packet)
 	by = g_config.scale.y * g_config.telemetry_resolution * by_raw + g_config.offset.y + g_config.telemetry_resolution * bx_raw * g_config.orth.xy;
 	bz = g_config.scale.z * g_config.telemetry_resolution * bz_raw + g_config.offset.z + g_config.telemetry_resolution * bx_raw * g_config.orth.xz + g_config.telemetry_resolution * by_raw * g_config.orth.yz;
 
+	g_mag_time = packet->sec + packet->subsec / 65536.0;
+
+	find_minmax(SEARCH, bx, &g_bfield_data.bx_min, &g_bfield_data.bx_max);
+	find_minmax(SEARCH, by, &g_bfield_data.by_min, &g_bfield_data.by_max);
+	find_minmax(SEARCH, bz, &g_bfield_data.bz_min, &g_bfield_data.bz_max);
+
 	if (g_config.avg_N_bfield != 0)
 	{
 		if (bfield_accu.count == 0)
 		{
-			bfield_accu.t_first = packet->sec + packet->subsec / 65536.0;
+			bfield_accu.t_first = g_mag_time;
 			bfield_accu.t_center = bfield_accu.t_first;
 			bfield_accu.bx = bx;
 			bfield_accu.by = by;
@@ -125,7 +150,7 @@ int process_bfield_packet(struct bfield_packet* packet)
 		}
 		else
 		{
-			bfield_accu.t_center += packet->sec + packet->subsec / 65536.0;
+			bfield_accu.t_center += g_mag_time;
 			bfield_accu.bx += bx;
 			bfield_accu.by += by;
 			bfield_accu.bz += bz;
@@ -135,7 +160,7 @@ int process_bfield_packet(struct bfield_packet* packet)
 
 		if (bfield_accu.count >= g_config.avg_N_bfield)
 		{
-			bfield_accu.t_last = packet->sec + packet->subsec / 65536.0;
+			bfield_accu.t_last = g_mag_time;
 			bfield_accu.t_center = bfield_accu.t_center / bfield_accu.count;
 
 			switch(g_config.timestamp_position)

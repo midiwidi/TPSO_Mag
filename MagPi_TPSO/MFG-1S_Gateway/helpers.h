@@ -14,12 +14,17 @@
 #define NO_FLUSH 0
 #define FLUSH 1
 
+#define SEARCH	0
+#define CLEAR	1
+
 #define DBG_DATA_OFF	0
 #define DBG_BYTE_STREAM	0b00000001
 #define DBG_PACKET		0b00000010
 #define DBG_ALL			0b00000011
 
-int limit_range(long *value, long llimit, long ulimit);
+int limit_range_lng(long *value, long llimit, long ulimit);
+int limit_range_dbl(double *value, double llimit, double ulimit);
+void find_minmax(int operation, double current_value, double *minimum_value, double *maximum_value);
 void clean_exit(int ret);
 int32_t extend_sign_bit(int32_t value, uint8_t width);
 void print_stream(uint8_t byte, uint8_t flush);

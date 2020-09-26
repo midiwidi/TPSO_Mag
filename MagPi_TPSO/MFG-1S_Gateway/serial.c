@@ -74,6 +74,7 @@ int open_serial(char *serial_port_device, uint32_t baud)
 		fprintf(stderr, "error from ioctl while writing serial port settings\n");
 		return -2;
 	}
+
 	return serial_port;
 }
 

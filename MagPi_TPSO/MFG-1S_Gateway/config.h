@@ -3,15 +3,17 @@
 
 #include "data_processing.h"
 
-#define VERSION "0.1"	// might be generated from Git version later
+#define CONSOLE_OUT 1
 #define HEX_BYTES_PER_ROW 48
 
 #define DEFAULT_LOGLEVEL LOG_WARNING
-
-#define DEFAULT_AVG_N_BFIELD 			6000		//every minute (@ 100Hz Magnetometer output rate)
-#define DEFAULT_AVG_N_HK 				240			//every 4min
-#define DEFAULT_TELEMETRY_RESOLUTION 	0.007748603821
-#define DEFAULT_TIMESTAMP_POSITION		TIMESTAMP_AT_LAST_SAMPLE
+#define DEFAULT_AVG_N_BFIELD 				6000		//every minute (@ 100Hz Magnetometer output rate)
+#define DEFAULT_AVG_N_HK 					240			//every 4min
+#define DEFAULT_TELEMETRY_RESOLUTION 		0.007748603821
+#define DEFAULT_TIMESTAMP_POSITION			TIMESTAMP_AT_LAST_SAMPLE
+#define DEFAULT_LOOP_SLEEP_TIME				1000
+#define NO_OUTPUT_FOR_N_SAMP_AFTER_TIMESET	2
+#define NULLS_DELTA_TSUBSEC					1
 
 #define CMD_FIFO "/tmp/tpsomag_cmd"
 #define DAT_FIFO "/tmp/tpsomag_dat"
@@ -61,8 +63,12 @@ struct config
 	double telemetry_resolution;
 	enum timestamp_pos timestamp_position;
 	uint8_t downsample_mode;
-	int version_major;
-	int version_minor;
+
+	char* serial_port_device;
+	char* mag_output_file;
+	char* mag_minmax_file;
+	char* HK_output_file;
+	char* HK_minmax_file;
 };
 
 #endif /* CONFIG_H_ */

@@ -47,9 +47,13 @@ typedef struct {
 } cmd_id_t;
 extern const cmd_id_t cmd;
 
+#define RESET_BIT	0x100
+
 #define APP_CMD_AVG_SAMP_BFIELD		0
 #define APP_CMD_AVG_SAMP_HK			1
 #define APP_CMD_LOGLEVEL			2
+#define APP_CMD_READ_CFG			3
+#define APP_SET_TIME				4
 #define APP_CMD_EXIT				128
 
 int send_cmd(uint8_t cmd_id, uint32_t cmd_data);

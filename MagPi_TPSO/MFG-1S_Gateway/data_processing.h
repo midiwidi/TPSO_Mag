@@ -19,6 +19,15 @@ struct bfield_data
 	double bx;
 	double by;
 	double bz;
+
+	double bx_min;
+	double by_min;
+	double bz_min;
+
+	double bx_max;
+	double by_max;
+	double bz_max;
+
 	union
 	{
 		struct
@@ -81,8 +90,34 @@ struct hk_data
 	double V5n;
 	double V33;
 	double V15;
+
+	double temp_e_min;
+	double temp_s_min;
+	double tilt_x_min;
+	double tilt_y_min;
+	double V5p_min;
+	double V5n_min;
+	double V33_min;
+	double V15_min;
+
+	double temp_e_max;
+	double temp_s_max;
+	double tilt_x_max;
+	double tilt_y_max;
+	double V5p_max;
+	double V5n_max;
+	double V33_max;
+	double V15_max;
+
 	uint32_t rd_ptr;
 	uint32_t wr_ptr;
+
+	int version_major;
+	int version_minor;
+	int32_t app_version;
+
+	double t_drift;
+
 	uint8_t updated;
 };
 

@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "globals.h"
 #include "log.h"
 #include "config.h"
@@ -5,6 +6,9 @@
 int g_ser_port = -1;
 int g_fd_fifocmd = -1;
 uint32_t g_packet_error_cnt = 0;
+char* g_conf_file = NULL;
+uint8_t g_startup = 1;
+double g_mag_time = 0;
 
 struct config g_config = {	.avg_N_bfield = DEFAULT_AVG_N_BFIELD,
 							.avg_N_hk = DEFAULT_AVG_N_HK,
@@ -31,7 +35,11 @@ struct config g_config = {	.avg_N_bfield = DEFAULT_AVG_N_BFIELD,
 							.telemetry_resolution = DEFAULT_TELEMETRY_RESOLUTION,
                             .timestamp_position = TIMESTAMP_AT_CENTER,
                             .downsample_mode = AVERAGING,
-							.version_major = 0,
-							.version_minor = 0};
+							.serial_port_device = NULL,
+							.mag_output_file = NULL,
+							.mag_minmax_file = NULL,
+							.HK_output_file = NULL,
+							.HK_minmax_file = NULL};
+
 struct bfield_data g_bfield_data;
 struct hk_data g_hk_data;

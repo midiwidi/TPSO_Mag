@@ -1,23 +1,21 @@
+#include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <tomlc99/toml.h>
 
 #include "log.h"
 #include "helpers.h"
 #include "toml.h"
 #include "data_processing.h"
+#include "globals.h"
+#include "serial.h"
 
-void toml_clean_exit(int ret, FILE *toml_fp, toml_table_t *toml_conf, char *conf_file)
+void toml_clean_exit(int ret, FILE *toml_fp, toml_table_t *toml_conf)
 {
 	if (toml_fp)
 	{
 		fclose(toml_fp);
 		toml_fp = NULL;
-	}
-
-	if (conf_file)
-	{
-		free(conf_file);
-		conf_file = NULL;
 	}
 
 	if (toml_conf)
@@ -94,8 +92,7 @@ int read_config(char* conf_file, struct config *cfg)
 	toml_table_t* toml_tab = NULL;
 
 	int64_t toml_int64;
-	uint8_t ui8_tmp;
-	uint16_t ui16_tmp;
+	long long_tmp;
 	double dbl_tmp;
 	int ret = NO_ERROR;
 
@@ -115,12 +112,16 @@ int read_config(char* conf_file, struct config *cfg)
 			//cfg->scale = //done at struct declaration
 			//cfg->telemetry_resolution = //done at struct declaration
 			cfg->timestamp_position = TIMESTAMP_AT_CENTER;
+			g_hk_data.version_major = 0;
+			g_hk_data.version_minor = 0;
+			g_hk_data.app_version = 0;
+			asprintf(&cfg->serial_port_device, "/dev/ttyUSB0");
+			asprintf(&cfg->mag_output_file, "data/mag.dat");
+			asprintf(&cfg->mag_minmax_file, "data/mag.dat.minmax");
+			asprintf(&cfg->HK_output_file, "data/hk.dat");
+			asprintf(&cfg->HK_minmax_file, "data/hk.dat.minmax");
 
-
-			//asprintf(&cfg->device, "%s", DEFAULT_BLOCK_DEVICE);
-
-
-			if (conf_file)
+			if (g_conf_file)
 					free(conf_file);
 			return NO_ERROR;
 		}
@@ -132,9 +133,6 @@ int read_config(char* conf_file, struct config *cfg)
 		// open conf file specified via parameter succeeded
 		log_write(LOG_INFO, "using config file %s", conf_file);
 
-	if (conf_file)
-		free(conf_file);
-
 	toml_conf = toml_parse_file(toml_fp, toml_errbuf, sizeof(toml_errbuf));
 
 	fclose(toml_fp);
@@ -144,15 +142,15 @@ int read_config(char* conf_file, struct config *cfg)
 	{
 		log_write(LOG_ERR, "error parsing the config file (%s)", toml_errbuf);
 		ret = ERROR;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+		toml_clean_exit(ret, toml_fp, toml_conf);
 	}
 
 	if((ret=toml_readkey_int(toml_conf, "version_major", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->version_major = toml_int64;
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	g_hk_data.version_major = toml_int64;
 	if((ret=toml_readkey_int(toml_conf, "version_minor", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->version_minor = toml_int64;
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	g_hk_data.version_minor = toml_int64;
 
 	// Reading the configuration from the *.toml file is divided into several blocks
 	// This is done to make sure that the order in which keys are read is such that
@@ -167,296 +165,155 @@ int read_config(char* conf_file, struct config *cfg)
 	{
 		log_write(LOG_ERR, "can't find configuration table 'Gateway'");
 		ret = ERROR;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+		toml_clean_exit(ret, toml_fp, toml_conf);
 	}
 
-	if((ret=toml_readkey_int(toml_tab, "width", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_width(toml_int64, &cfg->cam.num_cols)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_widthheight(toml_int64, "pixel per line", &cfg->core.pixels_per_line)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_widthheight(toml_int64, "test pattern generator width", &cfg->core.tptrngen_size_x)))
-			toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	if((ret=toml_readkey_int(toml_tab, "Bfield_Divider", &toml_int64)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	long_tmp = toml_int64;
+	if (limit_range_lng(&long_tmp, 0, 8640000))
+		log_write(LOG_WARNING, "Magnetic field sample rate divider is out of range and was set to %ld", toml_int64);
+	g_config.avg_N_bfield = toml_int64;
 
-	if((ret=toml_readkey_int(toml_tab, "loglevel", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_loglevel(toml_int64, &cfg->loglevel)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	setlogmask(LOG_UPTO (cfg->loglevel));
+	if((ret=toml_readkey_int(toml_tab, "HK_Divider", &toml_int64)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	long_tmp = toml_int64;
+	if (limit_range_lng(&long_tmp, 0, 86400))
+		log_write(LOG_WARNING, "HK sample rate divider is out of range and was set to %ld", toml_int64);
+	g_config.avg_N_hk = toml_int64;
 
-	/* locate the [swir.camera] table */
-	if (!(toml_tab = toml_table_in(toml_tab, "camera")))
+	if((ret=toml_readkey_int(toml_tab, "Downsampling_Mode", &toml_int64)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	long_tmp = toml_int64;
+	if (limit_range_lng(&long_tmp, 0, 1))
 	{
-		log_write(LOG_ERR, "can't find configuration table swir.camera");
-		ret = EXIT_TOML_SERTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+		log_write(LOG_WARNING, "Downsampling mode can only be 0 or 1 and was set to 0", toml_int64);
+		toml_int64 = AVERAGING;
+	}
+	g_config.downsample_mode = toml_int64;
+
+	if((ret=toml_readkey_int(toml_tab, "Timestamp_Position", &toml_int64)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	long_tmp = toml_int64;
+	if (limit_range_lng(&long_tmp, TIMESTAMP_AT_FIRST_SAMPLE, TIMESTAMP_AT_LAST_SAMPLE))
+	{
+		log_write(LOG_WARNING, "Timestamp Position can only be 0, 1 or 2 and was set to 1", toml_int64);
+		toml_int64 = TIMESTAMP_AT_CENTER;
+	}
+	g_config.timestamp_position = toml_int64;
+
+	if((ret=toml_readkey_int(toml_tab, "Loglevel", &toml_int64)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	long_tmp = toml_int64;
+	if (limit_range_lng(&long_tmp, 0, 7))
+		log_write(LOG_WARNING, "Log level is out of range and was set to %ld", toml_int64);
+	g_config.loglevel = toml_int64;
+	setlogmask(LOG_UPTO(g_config.loglevel));
+
+	if((ret=toml_readkey_dbl(toml_tab, "Telemetry_Res", &dbl_tmp)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if (limit_range_dbl(&dbl_tmp, 0.0, 1.0))
+		log_write(LOG_WARNING, "Telemetry resolution is out of range and was set to %f", dbl_tmp);
+	g_config.telemetry_resolution = dbl_tmp;
+
+	if (cfg->serial_port_device == NULL) // don't change the serial port during re-reading the config file
+	{
+		if((ret=toml_readkey_str(toml_tab, "Serial_Port", &cfg->serial_port_device)))
+			toml_clean_exit(ret, toml_fp, toml_conf);
+		if (g_ser_port >= 0)
+			close(g_ser_port);
+		g_ser_port = open_serial(g_config.serial_port_device, 115200);
+		if (g_ser_port < 0)
+		{
+			log_write(LOG_ERR, "can't open device %s at a baud rate of 115200", g_config.serial_port_device);
+			clean_exit(ERROR);
+		}
 	}
 
-	if((ret=toml_readkey_int(toml_tab, "baud", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_baud(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg0.bits.baud = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "trigger_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_trigger_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg0.bits.trigger_mode = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "shutter_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_shutter_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg0.bits.shutter_mode = ui8_tmp;
+	if((ret=toml_readkey_str(toml_tab, "Mag_File", &cfg->mag_output_file)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	asprintf(&cfg->mag_minmax_file, "%s.minmax", cfg->mag_output_file);
 
-	if((ret=toml_readkey_int(toml_tab, "integration_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_integr_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.integration_mode.bits.mode = ui8_tmp;
-
-	if((ret=toml_readkey_int(toml_tab, "gain", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_gain(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg2.bits.gain = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "asm", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_asm(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg2.bits.as_mode = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "cds", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_cds(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg2.bits.cds = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "amp_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_amp_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.cfg2.bits.amp_mode = ui8_tmp;
-
-	if((ret=toml_readkey_int(toml_tab, "x_start", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_xstart(toml_int64, &cfg->cam.first_col)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "y_start", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_ystart(toml_int64, &cfg->cam.first_line)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "tec_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_tec_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.tec.bits.mode = ui8_tmp;
-	if((ret=toml_readkey_int(toml_tab, "tec_temp", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_tec_temp(toml_int64, &ui16_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->cam.tec.bits.temp_low = ui16_tmp & 0x03;
-	cfg->cam.tec.bits.temp_high = ui16_tmp >> 2 & 0x0F;
-
-	if((ret=toml_readkey_int(toml_tab, "power_on_delay", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_pwrondelay(toml_int64, &cfg->pwron_delay)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	if((ret=toml_readkey_str(toml_tab, "HK_File", &cfg->HK_output_file)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	asprintf(&cfg->HK_minmax_file, "%s.minmax", cfg->HK_output_file);
 
 	// locate the [Calibration] table
 	if (!(toml_tab = toml_table_in(toml_conf, "Calibration")))
 	{
 		log_write(LOG_ERR, "can't find configuration table 'Calibration'");
-		ret = EXIT_TOML_SWIRTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-	/* locate the [swir.core] table */
-	if (!(toml_tab = toml_table_in(toml_tab, "core")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.core");
-		ret = EXIT_TOML_CORETAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+		ret = ERROR;
+		toml_clean_exit(ret, toml_fp, toml_conf);
 	}
 
-	if((ret=toml_readkey_str(toml_tab, "block_device", &cfg->device)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_BX", &g_config.scale.x)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_BY", &g_config.scale.y)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_BZ", &g_config.scale.z)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
 
-	if((ret=toml_readkey_int(toml_tab, "fb_ovfl_handling_off", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_ovf_hndl(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.control.bits.fb_ovf_handling_off = ui8_tmp;
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_BX", &g_config.offset.x)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_BY", &g_config.offset.y)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_BZ", &g_config.offset.z)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
 
-	if((ret=toml_readkey_int(toml_tab, "arith_bit_discard", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_discard_bits(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.control.bits.discard_bits = ui8_tmp;
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Orth_XY", &g_config.orth.xy)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Orth_XZ", &g_config.orth.xz)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Orth_YZ", &g_config.orth.yz)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
 
-	if((ret=toml_readkey_int(toml_tab, "sol_source", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_sol_src(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.control.bits.sol_source = ui8_tmp;
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_TE", &g_config.scale.temp_e)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_TS", &g_config.scale.temp_s)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_TiltX", &g_config.scale.tilt_x)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_TiltY", &g_config.scale.tilt_y)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_V5p", &g_config.scale.V5p)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_V5n", &g_config.scale.V5n)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_3V3", &g_config.scale.V33)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Scale_1V5", &g_config.scale.V15)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
 
-	if((ret=toml_readkey_int(toml_tab, "data_source", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_data_src(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.control.bits.data_source = ui8_tmp;
-
-	if((ret=toml_readkey_int(toml_tab, "burst_length", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_burst_len(toml_int64, &cfg->core.burst_length)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "burst_period", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_burst_period(toml_int64, &cfg->core.burst_period)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_dbl(toml_tab, "tptrngen_pixel_clk", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_pclk(dbl_tmp, &cfg->core.tptrngen_pixel_clk)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_random_seed", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_seed(toml_int64, &cfg->tptrn_params.random_seed)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_checker_width", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_tile_size(toml_int64, &cfg->tptrn_params.checker_width)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_checker_height", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_tile_size(toml_int64, &cfg->tptrn_params.checker_height)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_checker_color2", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_color(toml_int64, &cfg->tptrn_params.checker_color2)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_checker_color1", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_color(toml_int64, &cfg->tptrn_params.checker_color1)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_dbl(toml_tab, "tptrngen_gradient_inc", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_grd_inc(dbl_tmp, &cfg->tptrn_params.gradient_inc)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_gradient_startcolor", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_color(toml_int64, &cfg->tptrn_params.gradient_startcolor)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if((ret=toml_readkey_int(toml_tab, "tptrngen_gradient_endcolor", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_color(toml_int64, &cfg->tptrn_params.gradient_endcolor)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "interrupt_mode", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_int_mode(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.interrupt_config.bits.mode = ui8_tmp;
-
-	if((ret=toml_readkey_int(toml_tab, "interrupt_nframes", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_int_nframes(toml_int64, &ui8_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	cfg->core.interrupt_config.bits.frame_count = ui8_tmp;
-
-	if((ret=toml_readkey_int(toml_tab, "arith_limit", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_px_limit(toml_int64, &cfg->core.arith_limit)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "arith_offset", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_px_offset(toml_int64, &cfg->core.arith_offset)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_TE", &g_config.offset.temp_e)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_TS", &g_config.offset.temp_s)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_TiltX", &g_config.offset.tilt_x)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_TiltY", &g_config.offset.tilt_y)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_V5p", &g_config.offset.V5p)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_V5n", &g_config.offset.V5n)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_3V3", &g_config.offset.V33)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
+	if((ret=toml_readkey_dbl(toml_tab, "Cal_Offset_1V5", &g_config.offset.V15)))
+		toml_clean_exit(ret, toml_fp, toml_conf);
 
 	/********************************************************************************/
 	/* 2nd Block: keys, which depend on keys read in previous block                 */
 	/********************************************************************************/
-	// locate the [swir] table
-	if (!(toml_tab = toml_table_in(toml_conf, "swir")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.x");
-		ret = EXIT_TOML_SWIRTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-
-	if((ret=toml_readkey_dbl(toml_tab, "fps", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_fps(dbl_tmp, cfg->cam.cfg0.bits.trigger_mode, &cfg->cam.fps)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_fps(dbl_tmp, cfg->cam.cfg0.bits.trigger_mode, &cfg->core.trigger_period)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	if((ret=toml_readkey_int(toml_tab, "height", &toml_int64)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_height(toml_int64, &cfg->cam.num_lines)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_pixels_per_frame(toml_int64, cfg->core.pixels_per_line, &cfg->core.pixels_per_frame)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_widthheight(toml_int64, "test pattern generator height", &cfg->core.tptrngen_size_y)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	/* locate the [swir.camera] table */
-	if (!(toml_tab = toml_table_in(toml_tab, "camera")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.camera");
-		ret = EXIT_TOML_SERTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-
-	if((ret=toml_readkey_dbl(toml_tab, "trigger_delay", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_trigger_delay(dbl_tmp, cfg->cam.cfg0.bits.shutter_mode, cfg->cam.cfg0.bits.trigger_mode, cfg->cam.cfg2.bits.cds, &cfg->cam.trigger_delay)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-
-	// locate the [swir] table
-	if (!(toml_tab = toml_table_in(toml_conf, "swir")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.x");
-		ret = EXIT_TOML_SWIRTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-	/* locate the [swir.core] table */
-	if (!(toml_tab = toml_table_in(toml_tab, "core")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.core");
-		ret = EXIT_TOML_CORETAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-
-	if((ret=toml_readkey_dbl(toml_tab, "tptrngen_lval_low_duration", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_tptrngen_lval_low(dbl_tmp, cfg->core.tptrngen_pixel_clk, &cfg->core.tptrngen_lval_low)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	// locate the [foo] table
 
 	/********************************************************************************/
 	/* 3nd Block: keys, which depend on keys read in previous block                 */
 	/********************************************************************************/
-	// locate the [swir] table
-	if (!(toml_tab = toml_table_in(toml_conf, "swir")))
-	{
-		log_write(LOG_ERR, "can't find configuration table swir.x");
-		ret = EXIT_TOML_SWIRTAB;
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	}
-	if((ret=toml_readkey_dbl(toml_tab, "exposure_time", &dbl_tmp)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_cam_exposure_time(dbl_tmp, cfg->cam.cfg0.bits.trigger_mode, &cfg->cam.exposure_time)))
-		toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
-	if ((ret=cfg_conv_dn_core_exposure_time(dbl_tmp, cfg->cam.cfg0.bits.trigger_mode, cfg->core.trigger_period, &cfg->core.trigger_width)))
-			toml_clean_exit(ret, toml_fp, toml_conf, conf_file);
+	// locate the [foo] table
 
 	/* done with toml_conf */
 	toml_free(toml_conf);
 	toml_conf = NULL;
 
-	return EXIT_NO_ERROR;
+	return NO_ERROR;
 }

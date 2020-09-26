@@ -1,13 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <float.h>
+#include <time.h>
+#include <math.h>
+
 #include "helpers.h"
 #include "log.h"
 #include "globals.h"
 #include "config.h"
 #include "serial.h"
 
-int limit_range(long *value, long llimit, long ulimit)
+int limit_range_lng(long *value, long llimit, long ulimit)
 {
 	if (*value < llimit)
 	{
@@ -22,8 +26,132 @@ int limit_range(long *value, long llimit, long ulimit)
 	return NO_ERROR;
 }
 
+int limit_range_dbl(double *value, double llimit, double ulimit)
+{
+	if (*value < llimit)
+	{
+		*value = llimit;
+		return ERROR;
+	}
+	if (*value > ulimit)
+	{
+		*value = ulimit;
+		return ERROR;
+	}
+	return NO_ERROR;
+}
+
+void find_minmax(int operation, double current_value, double *minimum_value, double *maximum_value)
+{
+	if (operation == CLEAR)
+	{
+		*minimum_value = DBL_MAX;
+		*maximum_value = -DBL_MAX;
+	}
+	else
+	{
+		if (current_value < *minimum_value)
+			*minimum_value = current_value;
+		if (current_value > *maximum_value)
+				*maximum_value = current_value;
+	}
+}
+
 void clean_exit(int ret)
 {
+	time_t t_seconds;
+	double t_subseconds;
+	struct tm *ptm;
+	double dbl_tmp;
+	FILE *fid;
+
+	/************************************************************************************************/
+	/* Output one vector of NULLs at the end of each file to be pushed into the database. This will */
+	/* make sure that a gap will be visible in the Grafana plots                                    */
+	/************************************************************************************************/
+	t_subseconds = modf(g_bfield_data.t, &dbl_tmp) * 1000000 + NULLS_DELTA_TSUBSEC;
+	t_seconds = (time_t)dbl_tmp;
+
+	ptm = gmtime (&t_seconds);
+	if (g_config.mag_output_file)
+	{
+		fid = fopen(g_config.mag_output_file,"a");
+		if (!fid)
+		{
+			log_write(LOG_ERR, "%s open error", g_config.mag_output_file);
+			free(g_config.mag_output_file);
+		}
+		fprintf(fid,"%04d-%02d-%02d "
+					"%02d:%02d:%02d.%.0f\t"
+					"NULL\tNULL\tNULL\t"
+					"NULL\tNULL\tNULL\t"
+					"NULL\n",
+					ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
+					ptm->tm_hour, ptm->tm_min, ptm->tm_sec, t_subseconds);
+		fclose(fid);
+		free(g_config.mag_output_file);
+	}
+
+	if (g_config.mag_minmax_file)
+	{
+		fid = fopen(g_config.mag_minmax_file,"a");
+		if (!fid)
+		{
+			log_write(LOG_ERR, "%s open error", g_config.mag_minmax_file);
+			free(g_config.mag_minmax_file);
+		}
+		fprintf(fid,"%04d-%02d-%02d "
+					"%02d:%02d:%02d.%.0f\t"
+					"NULL\tNULL\tNULL\t"
+					"NULL\tNULL\tNULL\n",
+					ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
+					ptm->tm_hour, ptm->tm_min, ptm->tm_sec, t_subseconds);
+		fclose(fid);
+		free(g_config.mag_minmax_file);
+	}
+
+	t_subseconds = modf(g_hk_data.t, &dbl_tmp) * 1000000 + NULLS_DELTA_TSUBSEC;
+	t_seconds = (time_t)dbl_tmp;
+	ptm = gmtime (&t_seconds);
+
+	if (g_config.HK_output_file)
+	{
+		fid = fopen(g_config.HK_output_file,"a");
+		if (!fid)
+		{
+			log_write(LOG_ERR, "%s open error", g_config.HK_output_file);
+			free(g_config.HK_output_file);
+		}
+		fprintf(fid,"%04d-%02d-%02d "
+					"%02d:%02d:%02d.%.0f\t"
+					"NULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\t"
+					"NULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\t"
+					"NULL\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+					ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
+					ptm->tm_hour, ptm->tm_min, ptm->tm_sec, t_subseconds);
+		fclose(fid);
+		free(g_config.HK_output_file);
+	}
+
+	if (g_config.HK_minmax_file)
+	{
+		fid = fopen(g_config.HK_minmax_file,"a");
+		if (!fid)
+		{
+			log_write(LOG_ERR, "%s open error", g_config.HK_minmax_file);
+			free(g_config.HK_minmax_file);
+		}
+		fprintf(fid,"%04d-%02d-%02d "
+					"%02d:%02d:%02d.%.0f\t"
+					"NULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\t"
+					"NULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+					ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
+					ptm->tm_hour, ptm->tm_min, ptm->tm_sec, t_subseconds);
+		fclose(fid);
+		free(g_config.HK_minmax_file);
+	}
+	/* Output NULL vectors <end> *********************************************************************/
+
 	if (ret != QUITE)
 	{
 		if (ret)
@@ -33,10 +161,17 @@ void clean_exit(int ret)
 	}
 	closelog();
 
-	if (g_fd_fifocmd>=0) close(g_fd_fifocmd);
+	if (g_fd_fifocmd >= 0)
+		close(g_fd_fifocmd);
 	unlink(CMD_FIFO);
 
-	if(g_ser_port>=0) close(g_ser_port);
+	if (g_ser_port >= 0)
+		close(g_ser_port);
+	if (g_config.serial_port_device)
+		free(g_config.serial_port_device);
+	if (g_conf_file)
+		free(g_conf_file);
+
 	exit(ret);
 }
 

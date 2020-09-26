@@ -12,7 +12,7 @@ void log_write(int facility_priority, char *format, ...)
 
 	va_start(args, format);
 
-	if (facility_priority <= g_config.loglevel)
+	if (facility_priority <= g_config.loglevel && CONSOLE_OUT)
 	{
 		if (facility_priority <= LOG_ERR)
 			vfprintf(stderr, format, args);
