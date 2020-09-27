@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	int cmd_buff_widx = 0;
 	int cmd_buff_ridx = 0;
 
-	time_t t1 = 0, t2 = 0, t_set = 0, t_cmd_set = 0, t_check = 0, t_max = 0;
+	time_t t1 = 0, t2 = 0, t_set = 0, t_cmd_set = 0, t_check = 0, t_min = 0, t_max = 0;
 	uint8_t setting_time_no_output = FALSE;
 
 	uint8_t dbg_data_src = DBG_DATA_OFF;
@@ -187,6 +187,9 @@ int main(int argc, char **argv)
 	setlogmask(LOG_UPTO (g_config.loglevel));
 
 	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Auflösung ist 1/8 = 0.125
+	usleep(100000);
+	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Auflösung ist 1/8 = 0.125
+	usleep(100000);
 
 	if(g_ser_port>=0) close(g_ser_port);
 	g_ser_port = open_serial(g_config.serial_port_device, 615384);
@@ -197,6 +200,8 @@ int main(int argc, char **argv)
 	}
 
 	// Set magnetometer data rate to 10 Hz
+	send_cmd(cmd.RATE, 2);
+	usleep(100000);
 	send_cmd(cmd.RATE, 2);
 
 	memset(&g_bfield_data, 0, sizeof(g_bfield_data));
@@ -215,6 +220,9 @@ int main(int argc, char **argv)
 	find_minmax(CLEAR, 0, &g_hk_data.V5n_min, &g_hk_data.V5n_max);
 	find_minmax(CLEAR, 0, &g_hk_data.V33_min, &g_hk_data.V33_max);
 	find_minmax(CLEAR, 0, &g_hk_data.V15_min, &g_hk_data.V15_max);
+
+	// empty receive buffer (using 2 bytes, because for some reason I always get at least one)
+	while(read(g_ser_port, &c_tmp, 2) >= 2);
 
 	while(1)
 	{
@@ -251,7 +259,7 @@ int main(int argc, char **argv)
 				if (setting_time_no_output && !settime_req)
 					setting_time_no_output--;
 
-				if (!setting_time_no_output)
+				if (setting_time_no_output == 0 && !settime_req)
 				{
 
 					log_write(LOG_INFO, "t=%.6f, BX=%10.3f, BY=%10.3f, BZ=%10.3f, status=0x%02x", g_bfield_data.t, g_bfield_data.bx, g_bfield_data.by, g_bfield_data.bz, g_bfield_data.status.raw);
@@ -301,7 +309,7 @@ int main(int argc, char **argv)
 
 			if (g_hk_data.updated)
 			{
-				if (!setting_time_no_output)
+				if (setting_time_no_output == 0 && !settime_req)
 				{
 					log_write(LOG_INFO, "t=%.6f, t_drift=%.6f, FW=%d, status=0x%04X, TE=%7.3f, TS=%7.3f, TiltX=%7.3f, TiltY=%7.3f, V5p=%5.3f, V5n=%5.3f, V3.3=%5.3f, V1.5=%5.3f, RdPtr=%d, WrPtr=%d, SoftVers=%06x%s, CfgVers=%d.%d",
 										g_hk_data.t, g_hk_data.t_drift, g_hk_data.firmware_version, g_hk_data.status.raw,
@@ -535,8 +543,9 @@ int main(int argc, char **argv)
 					if (time(NULL) >= t_check)
 					{
 						t_max = t_set + 1;
+						t_min = t_set - 1;
 						//log_write(LOG_NOTICE, "check: t_set_min=%ld, t_set_max=%ld, mag.t=%f", t_set, t_set + TIMESYNC_CHECK_SAMP * g_config.avg_N_bfield / DEFAULT_MAG_RATE, g_bfield_data.t);
-						if ( (g_mag_time >= t_set) && (g_mag_time <= t_max) )
+						if ( (g_mag_time >= t_min) && (g_mag_time <= t_max) )
 						{
 							settime_req = FALSE;
 							log_write(LOG_NOTICE,"Time successfully set");
