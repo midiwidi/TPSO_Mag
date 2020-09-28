@@ -548,7 +548,7 @@ int main(int argc, char **argv)
 						if ( (g_mag_time >= t_min) && (g_mag_time <= t_max) )
 						{
 							settime_req = FALSE;
-							log_write(LOG_NOTICE,"Time successfully set");
+							log_write(LOG_NOTICE,"Time successfully set (min=%ld, max=%ld, mag=%.1f)", t_set, t_max, g_mag_time);
 						}
 						else
 						{
