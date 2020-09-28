@@ -93,6 +93,10 @@ BF_FILE=/home/pi/Projects/TPSO_Mag/data/mag.dat
 HK_FILE=/home/pi/Projects/TPSO_Mag/data/hk.dat
 BF_MINMAX_FILE=/home/pi/Projects/TPSO_Mag/data/mag.dat.minmax
 HK_MINMAX_FILE=/home/pi/Projects/TPSO_Mag/data/hk.dat.minmax
+TABLE_BFIELD=bfield
+TABLE_BFIELD_MINMAX=bfield_minmax
+TABLE_HK=hk
+TABLE_HK_MINMAX=hk_minmax
 
 if [[ -z "${TPSO_DB_PASS}" ]]; then
    logger "[pushdata] Environment variable TPSO_DB_PASS doesn't exist. Please create it using 'export TPSO_DB_PASS=mypass'. Replace mypass with the database password for the user postgres."
@@ -121,7 +125,7 @@ if [ -f "$BF_FILE" ]; then
 	
 	\COPY bfield_import from '$BF_FILE.push' with delimiter E'\t' null as 'NULL';
 	
-	INSERT INTO bfield(time, bx, by, bz, clipx, clipy, clipz, sync)
+	INSERT INTO $TABLE_BFIELD(time, bx, by, bz, clipx, clipy, clipz, sync)
 	SELECT *
 	FROM bfield_import ON conflict 
 	DO NOTHING;
@@ -158,7 +162,7 @@ if [ -f "$BF_MINMAX_FILE" ]; then
 	
 	\COPY bfield_import from '$BF_MINMAX_FILE.push' with delimiter E'\t' null as 'NULL';
 	
-	INSERT INTO bfield_minmax(time, bx_min, by_min, bz_min, bx_max, by_max, bz_max)
+	INSERT INTO $TABLE_BFIELD_MINMAX(time, bx_min, by_min, bz_min, bx_max, by_max, bz_max)
 	SELECT *
 	FROM bfield_import ON conflict 
 	DO NOTHING;
@@ -216,7 +220,7 @@ if [ -f "$HK_FILE" ]; then
 	
 	\COPY hk_import from '$HK_FILE.push' with delimiter E'\t' null as 'NULL';
 	
-	INSERT INTO hk(time, mag_start, excit_off, recording, flash_recording_disabled, open_loop, peo, sync_off, sync_src, crc_ok, boot_main, eeprom_page, rate, dbg, temp_e, temp_s, tilt_x, tilt_y, V5p, V5n, V33, V15, rd_ptr, wr_ptr, app_version, cfg_version, RISC_SW_version, time_drift)
+	INSERT INTO $TABLE_HK(time, mag_start, excit_off, recording, flash_recording_disabled, open_loop, peo, sync_off, sync_src, crc_ok, boot_main, eeprom_page, rate, dbg, temp_e, temp_s, tilt_x, tilt_y, V5p, V5n, V33, V15, rd_ptr, wr_ptr, app_version, cfg_version, RISC_SW_version, time_drift)
 	SELECT *
 	FROM hk_import ON conflict 
 	DO NOTHING;
@@ -263,7 +267,7 @@ if [ -f "$HK_MINMAX_FILE" ]; then
 	
 	\COPY hk_import from '$HK_MINMAX_FILE.push' with delimiter E'\t' null as 'NULL';
 	
-	INSERT INTO hk_minmax(time, temp_e_min, temp_s_min, tilt_x_min, tilt_y_min, V5p_min, V5n_min, V33_min, V15_min, temp_e_max, temp_s_max, tilt_x_max, tilt_y_max, V5p_max, V5n_max, V33_max, V15_max)
+	INSERT INTO $TABLE_HK_MINMAX(time, temp_e_min, temp_s_min, tilt_x_min, tilt_y_min, V5p_min, V5n_min, V33_min, V15_min, temp_e_max, temp_s_max, tilt_x_max, tilt_y_max, V5p_max, V5n_max, V33_max, V15_max)
 	SELECT *
 	FROM hk_import ON conflict 
 	DO NOTHING;
