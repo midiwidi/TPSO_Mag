@@ -39,6 +39,7 @@ int main(int argc, char **argv)
 	struct tm *ptm;
 	useconds_t loop_sleep_time = DEFAULT_LOOP_SLEEP_TIME;
 	uint8_t settime_req = 0;
+	uint8_t settime_initial = TRUE;
 
 	uint8_t byte_stream[STREAM_BUFF_LEN];
 	uint8_t packet_len;
@@ -48,7 +49,7 @@ int main(int argc, char **argv)
 	int cmd_buff_widx = 0;
 	int cmd_buff_ridx = 0;
 
-	time_t t1 = 0, t2 = 0, t_set = 0, t_cmd_set = 0, t_check = 0, t_min = 0, t_max = 0;
+	time_t t_tmp = 0, t_recheck = 0, t1 = 0, t2 = 0, t_set = 0, t_cmd_set = 0, t_check = 0, t_min = 0, t_max = 0;
 	uint8_t setting_time_no_output = FALSE;
 
 	uint8_t dbg_data_src = DBG_DATA_OFF;
@@ -186,9 +187,11 @@ int main(int argc, char **argv)
 
 	setlogmask(LOG_UPTO (g_config.loglevel));
 
-	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Auflösung ist 1/8 = 0.125
+	// Leave the baud rate at 115200
+	/*
+	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Aufloesung ist 1/8 = 0.125
 	usleep(100000);
-	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Auflösung ist 1/8 = 0.125
+	send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Aufloesung ist 1/8 = 0.125
 	usleep(100000);
 
 	if(g_ser_port>=0) close(g_ser_port);
@@ -198,6 +201,7 @@ int main(int argc, char **argv)
 		log_write(LOG_ERR, "can't open device %s  at a baud rate of 615384", g_config.serial_port_device);
 		clean_exit(ERROR);
 	}
+	*/
 
 	// Set magnetometer data rate to 10 Hz
 	send_cmd(cmd.RATE, 2);
@@ -485,6 +489,9 @@ int main(int argc, char **argv)
 				{
 					g_startup = TRUE;
 					sleep(3); // Magnetometer needs 2s to boot -> wait 3s before issuing SW commands
+
+					// Leave baud rate at 115200
+					/*
 					if(g_ser_port>=0) close(g_ser_port);
 					g_ser_port = open_serial(g_config.serial_port_device, 115200);
 					if (g_ser_port < 0)
@@ -492,7 +499,7 @@ int main(int argc, char **argv)
 						log_write(LOG_ERR, "can't open device %s  at a baud rate of 115200", g_config.serial_port_device);
 						clean_exit(ERROR);
 					}
-					send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Auflösung ist 1/8 = 0.125
+					send_cmd(cmd.BAUD_RATE_DIV, (MAG_BAUDDIV_615384-1)*8 );		//Aufloesung ist 1/8 = 0.125
 
 					if(g_ser_port>=0) close(g_ser_port);
 					g_ser_port = open_serial(g_config.serial_port_device, 615384);
@@ -501,6 +508,7 @@ int main(int argc, char **argv)
 						log_write(LOG_ERR, "can't open device %s  at a baud rate of 615384", g_config.serial_port_device);
 						clean_exit(ERROR);
 					}
+					*/
 				}
 			}
 
@@ -511,54 +519,75 @@ int main(int argc, char **argv)
 		/* Set Time if requested ********************************************************************************************/
 		if (settime_req)
 		{
-			if (!t1)
+			t_tmp = time(NULL);
+			if (t_tmp <= MIN_VALID_TIME)
 			{
-				t1 = time(NULL);
-				loop_sleep_time = 0;
-				//log_write(LOG_NOTICE, "t1=%ld", t1);
-			}
-			// Wait for the second to change so that there is enough time until the next 1PPS
-			if ( (t2 = time(NULL)) != t1)
-			{
-				if (!t_check) // was time already set and we are waiting to check if is successful?
+				if (settime_initial) // If this is initially setting the time then wait until there is a valid time
 				{
-					t_check = t2 + 1; // check in TIMESYNC_CHECK_SAMP samples if time was set correctly
-					t2++; // increment the time by 1 as it is for the next 1PPS
-					if (t_cmd_set) // if specific time was supplied, use the current time
-						t_set = t_cmd_set;
-					else
-						t_set = t2;
-
-					//log_write(LOG_NOTICE, "t2=%ld, t_set=%ld, t_check=%ld", t2, t_set, t_check);
-					setting_time_no_output = NO_OUTPUT_FOR_N_SAMP_AFTER_TIMESET;
-
-					send_cmd(cmd.TIMESTAMP_MSW, t_set >> 16);
-					usleep(1000);
-					send_cmd(cmd.TIMESTAMP_LSW, t_set & 0xFFFF);
-
-					loop_sleep_time = DEFAULT_LOOP_SLEEP_TIME;
-				}
-				else
-				{
-					if (time(NULL) >= t_check)
+					if (t_tmp >= t_recheck)
 					{
-						t_max = t_set + 1;
-						t_min = t_set - 1;
-						//log_write(LOG_NOTICE, "check: t_set_min=%ld, t_set_max=%ld, mag.t=%f", t_set, t_set + TIMESYNC_CHECK_SAMP * g_config.avg_N_bfield / DEFAULT_MAG_RATE, g_bfield_data.t);
-						if ( (g_mag_time >= t_min) && (g_mag_time <= t_max) )
-						{
-							settime_req = FALSE;
-							log_write(LOG_NOTICE,"Time successfully set (min=%ld, max=%ld, mag=%.1f)", t_set, t_max, g_mag_time);
-						}
+						log_write(LOG_WARNING,"System time (%ld) invalid. Waiting for a valid time before setting the magnetometer time.", t_tmp);
+						t_recheck = t_tmp + 5;
+					}
+				}
+				else // If this is syncing the time then just ignore it
+				{
+					log_write(LOG_WARNING,"System time (%ld) invalid. Skipping magnetometer time sync.", t_tmp);
+					settime_req = FALSE;
+				}
+			}
+			else
+			{
+				if (!t1)
+				{
+					t1 = time(NULL);
+					loop_sleep_time = 0;
+					//log_write(LOG_NOTICE, "t1=%ld", t1);
+				}
+				// Wait for the second to change so that there is enough time until the next 1PPS
+				if ( (t2 = time(NULL)) != t1)
+				{
+					if (!t_check) // was time already set and we are waiting to check if is successful?
+					{
+						t_check = t2 + 1; // check in TIMESYNC_CHECK_SAMP samples if time was set correctly
+						t2++; // increment the time by 1 as it is for the next 1PPS
+						if (t_cmd_set) // if specific time was supplied, use the current time
+							t_set = t_cmd_set;
 						else
+							t_set = t2;
+
+						//log_write(LOG_NOTICE, "t2=%ld, t_set=%ld, t_check=%ld", t2, t_set, t_check);
+						setting_time_no_output = NO_OUTPUT_FOR_N_SAMP_AFTER_TIMESET;
+
+						send_cmd(cmd.TIMESTAMP_MSW, t_set >> 16);
+						usleep(1000);
+						send_cmd(cmd.TIMESTAMP_LSW, t_set & 0xFFFF);
+
+						loop_sleep_time = DEFAULT_LOOP_SLEEP_TIME;
+					}
+					else
+					{
+						if (time(NULL) >= t_check)
 						{
-							settime_req = TRUE;
-							log_write(LOG_WARNING,"Setting time unsuccessful (min=%ld, max=%ld, mag=%.1f) ... retrying",t_set, t_max, g_mag_time);
+							t_max = t_set + 1;
+							t_min = t_set - 1;
+							//log_write(LOG_NOTICE, "check: t_set_min=%ld, t_set_max=%ld, mag.t=%f", t_set, t_set + TIMESYNC_CHECK_SAMP * g_config.avg_N_bfield / DEFAULT_MAG_RATE, g_bfield_data.t);
+							if ( (g_mag_time >= t_min) && (g_mag_time <= t_max) )
+							{
+								settime_req = FALSE;
+								settime_initial = FALSE;
+								log_write(LOG_NOTICE,"Time successfully set (min=%ld, max=%ld, mag=%.1f)", t_set, t_max, g_mag_time);
+							}
+							else
+							{
+								settime_req = TRUE;
+								log_write(LOG_WARNING,"Setting time unsuccessful (min=%ld, max=%ld, mag=%.1f) ... retrying",t_set, t_max, g_mag_time);
+							}
+							t1 = 0;
+							t2 = 0;
+							t_set = 0;
+							t_check = 0;
 						}
-						t1 = 0;
-						t2 = 0;
-						t_set = 0;
-						t_check = 0;
 					}
 				}
 			}

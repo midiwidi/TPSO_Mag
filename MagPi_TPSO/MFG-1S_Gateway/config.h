@@ -21,6 +21,8 @@
 #define DATA_BUF_DEPTH 		200
 #define CMD_BUF_DEPTH  		32
 
+#define MIN_VALID_TIME		1577836800	// 2020-01-01 00:00:00 (in sec since 01.01.1970)
+
 struct config
 {
 	uint32_t avg_N_bfield;

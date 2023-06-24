@@ -33,6 +33,7 @@ int send_cmd(uint8_t cmd_id, uint32_t cmd_data)
 	p_cmd_buff++;
 
 	bytes_to_write = p_cmd_buff-cmd_buff;
+	print_packet(cmd_buff, bytes_to_write);
 	bytes_written = write(g_ser_port, cmd_buff, bytes_to_write);
 	if (bytes_to_write != bytes_written)
 		log_write(LOG_ERR, "sending CMD failed (only %d/%d bytes sent)", bytes_written, bytes_to_write);
