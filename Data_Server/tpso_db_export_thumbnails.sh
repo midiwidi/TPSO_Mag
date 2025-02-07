@@ -38,11 +38,11 @@ do
 
 	#Get B-Field Image
 	echo "Getting B-field Image of week $week"
-	wget -q -O $bfield_fname "localhost:3000/render/d/Dls2Cv1nk/magnetic-field?orgId=3&width=1800&height=1590&kiosk=tv&from="$(date -d $week_start_date +%s)"000&to="$(date -d $week_end_date +%s)"000"
+	wget -q -O $bfield_fname "localhost:3000/render/d/feb7xc27iudxce/magnetic-field?orgId=3&width=1800&height=1590&kiosk&from="$(date -d $week_start_date +%s)"000&to="$(date -d $week_end_date +%s)"000"
 
 	#Get HK Image
 	echo "Getting HK Image of week $week"
-	wget -q -O $hk_fname "localhost:3000/render/d/fQdrqD1nk/housekeeping?orgId=3&width=1800&height=2690&kiosk=tv&from="$(date -d $week_start_date +%s)"000&to="$(date -d $week_end_date +%s)"000"
+	wget -q -O $hk_fname "localhost:3000/render/d/fQdrqD1nk/housekeeping?orgId=3&width=1800&height=2690&kiosk&from="$(date -d $week_start_date +%s)"000&to="$(date -d $week_end_date +%s)"000"
 
 	week_start_date=$(date -d "$week_start_date + 7 day" +"%Y%m%d")
 done
